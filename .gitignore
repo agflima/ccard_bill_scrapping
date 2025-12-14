@@ -1,0 +1,7 @@
+/include
+/Lib
+/Scripts
+/share
+test.ipynb
+pyvenv.cfg
+.env
