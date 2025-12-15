@@ -2,9 +2,11 @@
 /Lib
 /Scripts
 /share
-test.ipynb
+/Notebooks
 pyvenv.cfg
 .env# Byte-compiled / optimized / DLL files
+
+
 __pycache__/
 *.py[codz]
 *$py.class
