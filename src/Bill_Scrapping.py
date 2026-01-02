@@ -5,6 +5,8 @@ import re
 from os import listdir, rename, getenv
 from os.path import isfile, join
 from dotenv import load_dotenv
+from datetime import datetime
+
 
 load_dotenv()
 
@@ -60,7 +62,6 @@ for i in listdir(path):
                         tokens = sorted(lines[topster],key=lambda t:t["x0"])
                         left = []
                         right = []
-                        # print([t["text"] for t in tokens])
                         for t in tokens:
                             if t["x0"] < x_split:
                                 left.append(t["text"])
@@ -71,22 +72,23 @@ for i in listdir(path):
                         right_line = " ".join(right_lines)
                         left_line = " ".join(left_lines)
     
-                        if 'próximas faturas' in left_line or 'próximas faturas' in right_line:
-                            next_dues = True
-                            continue
-                        if next_dues == False:
+                        if 'próximas faturas' in left_line:
+                            next_dues_left = True
+                        if 'próximas faturas' in right_line:
+                            next_dues_right = True                            
+                        
+                        if not next_dues_left:
                             data_left = re.search(r"(\d{2}/\d{2})",left_line)
-                            money_left = re.search(r"(\d+,\d{2})", left_line)
+                            money_left = re.search(r"(-?\d{1,3}(?:\.\d{3})*,\d{2})", left_line)
                             if data_left and money_left:
                                 if re.match(r"(\d{2}/\d{2})",left_line):
                                     left_reg.append(left_line)
-                                    # logger.info(f'Coluna Esquerda: {top} - {left_line}')
+                        if not next_dues_right:
                             data_right = re.search(r"(\d{2}/\d{2})",right_line)
-                            money_right = re.search(r"(\d+,\d{2})", right_line)
+                            money_right = re.search(r"(-?\d{1,3}(?:\.\d{3})*,\d{2})", right_line)
                             if data_right and money_right:
                                 if re.match(r"(\d{2}/\d{2})",right_line):
                                     right_reg.append(right_line)
-                                    # logger.info(f'Coluna Direita: {top} - {right_line}')
                         else:
                             continue
                     for token in left_reg:
@@ -95,17 +97,14 @@ for i in listdir(path):
                         value = tokens[-1]
                         desc_tokens = tokens[1:-1]
                         desc = " ".join(desc_tokens)
-                        logger.info('L DIC')
-                        logger.info(month, year)
                         dic = {"Year":year,
                                       "Month":month,
                                       "Date":date, 
-                                      "Card":"3985", 
+                                      "Card":"----", 
                                       "Category":"",
                                       "Description":desc, 
-                                      "Value":value, 
-                                      "Type":"D"}
-                        # logger.info(dicionario)
+                                      "Value":value
+                                      }
                         structured.append(dic)
                     for token in right_reg:
                         tokens = token.split(" ")
@@ -113,17 +112,14 @@ for i in listdir(path):
                         value = tokens[-1]
                         desc_tokens = tokens[1:-1]
                         desc = " ".join(desc_tokens)
-                        logger.info('R DIC')
-                        logger.info(month, year)
                         dic = {"Year":year,
                                       "Month":month,
                                       "Date":date, 
-                                      "Card":"3985", 
+                                      "Card":"---", 
                                       "Category":"",
                                       "Description":desc, 
-                                      "Value":value, 
-                                      "Type":"D"}
-                        # logger.info(dicionario)
+                                      "Value":value
+                                      }
                         structured.append(dic)
         except Exception as e:
             logger.error(f'Error {e} for reading {i}. check the input at {err_path}.')        
@@ -141,5 +137,28 @@ for i in listdir(now_path):
         logger.error(f'Error {e} while moving file {i}')
 
 df_new = pd.DataFrame(structured)
-
-print(df_new.head())
+df_raw = df_new.copy()
+df = df_raw.copy()
+df = df.assign(
+    Invoice_Date = pd.to_datetime(
+        df['Year'].astype(str) + '-' +
+        df['Month'].astype(str).str.zfill(2) + '-01'
+    )
+)
+df = df.sort_values('Invoice_Date')
+df['Value_clean'] = (
+    df['Value']
+    .str.replace('.','',regex=False)
+    .str.replace(',','.',regex=False)
+)
+df['Value_clean'] = pd.to_numeric(df['Value_clean'])
+df['Value_clean'].dtype
+df['Value'] = df['Value_clean']
+df.drop(columns=['Value_clean'],inplace=True)
+mask = df['Description'].str.strip().str.endswith('-')
+df.loc[mask,'Value'] = -df.loc[mask,'Value'].abs()
+df.loc[mask,'Description'] = (
+    df.loc[mask,'Description']
+    .str.replace(r'\s*-$','',regex=True)
+    .str.strip()
+)
